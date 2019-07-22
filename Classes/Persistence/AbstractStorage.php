@@ -1,19 +1,11 @@
 <?php
 declare(strict_types=1);
-namespace In2code\In2publishCore\Persistence\Storage;
+namespace In2code\In2publishCore\Persistence;
 
 abstract class AbstractStorage implements Storage
 {
-    /**
-     * @var string
-     */
-    private $name = '';
+    protected $name = '';
 
-    /**
-     * AbstractStorage constructor.
-     *
-     * @param string $name
-     */
     public function __construct(string $name)
     {
         $this->name = $name;

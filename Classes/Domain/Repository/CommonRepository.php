@@ -220,31 +220,13 @@ class CommonRepository extends BaseRepository
         if (null !== $record) {
             return $record;
         }
-        $local = $this->findPropertiesByProperty(
-            $this->localDatabase,
-            $idFieldName,
-            $identifier,
-            '',
-            '',
-            '',
-            '',
-            'uid',
-            $tableName
-        );
-        $local = empty($local) ? [] : reset($local);
-        $foreign = $this->findPropertiesByProperty(
-            $this->foreignDatabase,
-            $idFieldName,
-            $identifier,
-            '',
-            '',
-            '',
-            '',
-            'uid',
-            $tableName
-        );
-        $foreign = empty($foreign) ? [] : reset($foreign);
-        return $this->recordFactory->makeInstance($this, $local, $foreign, [], $tableName, $idFieldName);
+        $recordRepository = GeneralUtility::makeInstance(CombinedRecordRepository::class);
+        $identifiers = GeneralUtility::makeInstance(Identifiers::class, [$idFieldName => $identifier]);
+        $combinedRecords = $recordRepository->findByIdentifiers($identifiers, $tableName);
+        if (empty($combinedRecords)) {
+            return GeneralUtility::makeInstance(NullRecord::class, $tableName);
+        }
+        return $combinedRecords[0]->toLegacyRecord();
     }
 
     /**
@@ -706,6 +688,7 @@ class CommonRepository extends BaseRepository
         if ($this->shouldSkipEnrichingPageRecord($record)) {
             return $record;
         }
+
         $recordIdentifier = $record->getIdentifier();
         $doktype = $record->getLocalProperty('doktype') ?? $record->getForeignProperty('doktpye');
         if (null !== $doktype) {
@@ -724,7 +707,13 @@ class CommonRepository extends BaseRepository
             if ($this->shouldSkipSearchingForRelatedRecordByTable($record, $tableName)) {
                 continue;
             }
-            $relatedRecords = $this->findByProperty('pid', $recordIdentifier, $tableName);
+            $recordRepository = GeneralUtility::makeInstance(CombinedRecordRepository::class);
+            $identifiers = GeneralUtility::makeInstance(Identifiers::class, ['pid' => $recordIdentifier]);
+            $relatedRecords = [];
+            $records = $recordRepository->findByIdentifiers($identifiers, $tableName);
+            foreach ($records as $relatedRecord) {
+                $relatedRecords[] = $relatedRecord->toLegacyRecord();
+            }
             $record->addRelatedRecords($relatedRecords);
         }
         return $record;
