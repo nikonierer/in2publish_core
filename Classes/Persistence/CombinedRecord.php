@@ -29,7 +29,7 @@ class CombinedRecord
     public function toLegacyRecord(): RecordInterface
     {
         $localProperties = $this->combinedRow->tryGetRowForStorageName('local') ?? [];
-        $foreignProperties = $this->combinedRow->getRowForStorageName('foreign') ?? [];
+        $foreignProperties = $this->combinedRow->tryGetRowForStorageName('foreign') ?? [];
         $record = GeneralUtility::makeInstance(RecordFactory::class)->makeInstance(
             CommonRepository::getDefaultInstance(),
             $localProperties,
