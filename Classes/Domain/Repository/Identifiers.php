@@ -8,7 +8,7 @@ use function json_encode;
 
 class Identifiers
 {
-    const IDENTIFIER_GLUE = "\n";
+    const IDENTIFIER_GLUE = ',';
 
     protected $identifiers = [];
 
@@ -43,7 +43,7 @@ class Identifiers
         return array_keys($this->identifiers);
     }
 
-    public function getIdentifierFieldList(string $glue = ','): string
+    public function getIdentifierFieldList(string $glue = self::IDENTIFIER_GLUE): string
     {
         return implode($glue, $this->getIdentifierFields());
     }
