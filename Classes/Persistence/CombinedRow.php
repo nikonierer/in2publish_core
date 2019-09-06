@@ -36,7 +36,7 @@ class CombinedRow
 
     public function hasRowForStorageName(string $storageName): bool
     {
-        return array_key_exists($storageName, $this->rows);
+        return isset($this->rows[$storageName]);
     }
 
     public function getRowForStorageName(string $storageName): array
