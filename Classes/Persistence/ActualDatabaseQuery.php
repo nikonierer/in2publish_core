@@ -4,13 +4,15 @@ namespace In2code\In2publishCore\Persistence;
 
 use Doctrine\DBAL\Driver\Statement;
 use In2code\In2publishCore\Service\Configuration\TcaService;
-use TYPO3\CMS\Core\Database\Query\QueryBuilder;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class ActualDatabaseQuery extends AbstractQuery implements DatabaseQuery
 {
-    public function execute(QueryBuilder $queryBuilder): Statement
+    public function execute(ConnectionPool $connectionPool): Statement
     {
+        $queryBuilder = $connectionPool->getQueryBuilderForTable($this->table);
+        $queryBuilder->getRestrictions()->removeAll();
         if (!$this->hasTable()) {
             throw MissingTableException::for();
         }

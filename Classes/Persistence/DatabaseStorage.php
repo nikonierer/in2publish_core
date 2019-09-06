@@ -2,19 +2,19 @@
 declare(strict_types=1);
 namespace In2code\In2publishCore\Persistence;
 
-use TYPO3\CMS\Core\Database\Connection;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class DatabaseStorage extends AbstractStorage
 {
     /**
-     * @var Connection
+     * @var ConnectionPool
      */
-    protected $connection = null;
+    protected $connectionPool = null;
 
-    public function setConnectionPool(Connection $connection)
+    public function setConnectionPool(ConnectionPool $connectionPool)
     {
-        $this->connection = $connection;
+        $this->connectionPool = $connectionPool;
     }
 
     public function createQuery(): Query
@@ -27,9 +27,7 @@ class DatabaseStorage extends AbstractStorage
         if (!($query instanceof DatabaseQuery)) {
             throw InvalidQueryTypeException::for($this, DatabaseQuery::class, $query);
         }
-        $queryBuilder = $this->connection->createQueryBuilder();
-        $queryBuilder->getRestrictions()->removeAll();
-        $statement = $query->execute($queryBuilder);
+        $statement = $query->execute($this->connectionPool);
         $result = GeneralUtility::makeInstance(DatabaseResult::class);
         $result->setStatement($statement);
         return $result;

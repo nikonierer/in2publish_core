@@ -5,7 +5,7 @@ namespace In2code\In2publishCore\Domain\Repository;
 use In2code\In2publishCore\Persistence\CombinedRecord;
 use In2code\In2publishCore\Persistence\ComboStorage;
 use In2code\In2publishCore\Persistence\DatabaseStorage;
-use In2code\In2publishCore\Utility\DatabaseUtility;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class CombinedRecordRepository
@@ -20,11 +20,11 @@ class CombinedRecordRepository
         $this->comboStorage = GeneralUtility::makeInstance(ComboStorage::class);
 
         $localStorage = new DatabaseStorage('local');
-        $localStorage->setConnectionPool(DatabaseUtility::buildLocalDatabaseConnection());
+        $localStorage->setConnectionPool(GeneralUtility::makeInstance(ConnectionPool::class));
         $this->comboStorage->addStorage($localStorage);
 
         $foreignStorage = new DatabaseStorage('foreign');
-        $foreignStorage->setConnectionPool(DatabaseUtility::buildForeignDatabaseConnection());
+        $foreignStorage->setConnectionPool(GeneralUtility::makeInstance(ForeignConnectionPool::class));
         $this->comboStorage->addStorage($foreignStorage);
     }
 
