@@ -26,11 +26,15 @@ class Identifiers
 
     public function buildRowIdentifierHash(array $row): string
     {
-        $identifier = [];
-        foreach (array_keys($this->identifiers) as $field) {
-            $identifier[$field] = $row[$field];
+        $identifyingProperties = [];
+        if (isset($row['uid'])) {
+            $identifyingProperties['uid'] = $row['uid'];
+        } else {
+            foreach (array_keys($this->identifiers) as $field) {
+                $identifyingProperties[$field] = $row[$field];
+            }
         }
-        return sha1(json_encode($identifier));
+        return sha1(json_encode($identifyingProperties));
     }
 
     public function asArray(): array
