@@ -45,6 +45,7 @@ use function array_column;
 use function array_combine;
 use function array_key_exists;
 use function array_merge;
+use function array_slice;
 use function explode;
 use function implode;
 use function is_array;
@@ -133,24 +134,32 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
             throw new MissingArgumentException('tableName');
         }
 
-        if (isset($this->preloadTables[$tableName])) {
-            $properties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
-            if (null !== $properties) {
-                $properties[$propertyName] = strtolower((string)$propertyValue);
-                return $this->getPreloadedRowsMatchingProperties($connection, $tableName, $properties, $indexField);
-            }
-        }
-
         if (empty($tableName)) {
             return $propertyArray;
         }
-        $sortingField = $this->tcaService->getSortingField($tableName);
+
         if (1 === preg_match(self::ADDITIONAL_ORDER_BY_PATTERN, $additionalWhere, $matches)) {
             $additionalWhere = $matches['where'];
             $orderBy = $matches['col'] . strtoupper($matches['dir'] ?? ' ASC');
         }
+        $sortingField = $this->tcaService->getSortingField($tableName);
         if (empty($orderBy) && !empty($sortingField)) {
             $orderBy = $sortingField . ' ASC';
+        }
+
+        if (isset($this->preloadTables[$tableName]) && empty($groupBy)) {
+            $properties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
+            if (null !== $properties) {
+                $properties[$propertyName] = strtolower((string)$propertyValue);
+                return $this->getPreloadedRowsMatchingProperties(
+                    $connection,
+                    $tableName,
+                    $properties,
+                    $indexField,
+                    $orderBy,
+                    (int)$limit
+                );
+            }
         }
         $additionalWhere = trim($additionalWhere);
         if (0 === stripos($additionalWhere, 'and')) {
@@ -221,6 +230,10 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
             throw new MissingArgumentException('tableName');
         }
 
+        if (empty($orderBy)) {
+            $orderBy = $this->tcaService->getSortingField($tableName);
+        }
+
         if (isset($this->preloadTables[$tableName])) {
             $additionalProperties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
             if (null !== $additionalProperties) {
@@ -228,12 +241,15 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
                     $properties[$propertyName] = strtolower((string)$propertyValue);
                 }
                 $properties = array_merge($additionalProperties, $properties);
-                return $this->getPreloadedRowsMatchingProperties($connection, $tableName, $properties, $indexField);
+                return $this->getPreloadedRowsMatchingProperties(
+                    $connection,
+                    $tableName,
+                    $properties,
+                    $indexField,
+                    $orderBy,
+                    (int)$limit
+                );
             }
-        }
-
-        if (empty($orderBy)) {
-            $orderBy = $this->tcaService->getSortingField($tableName);
         }
 
         $query = $connection->createQueryBuilder();
@@ -300,7 +316,7 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
     }
 
     /**
-     * Select all rows from a table. Only useful for tables with few entries.
+     * Select all rows from a table. Only useful for tables with few thousand entries.
      *
      * @param Connection $connection
      * @param string $tableName
@@ -313,8 +329,7 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
         $query->select('*')->from($tableName);
         $this->statistics['f'][__FUNCTION__]++;
         $this->statistics['t'][$tableName]++;
-        $rows = $query->execute()->fetchAll();
-        return array_column($rows, null, 'uid');
+        return $query->execute()->fetchAll();
     }
 
     /**
@@ -416,13 +431,21 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
         Connection $connection,
         ?string $tableName,
         array $properties,
-        string $indexField
+        string $indexField,
+        string $orderBy,
+        int $limit
     ): array {
         $cache = $this->getPreloadCache($connection, $tableName);
         foreach ($cache as $idx => $row) {
             if (!$this->isRowMatchingProperties($row, $properties)) {
                 unset($cache[$idx]);
             }
+        }
+        if ($limit > 0 && $limit < count($cache)) {
+            $cache = array_slice($cache, 0, $limit);
+        }
+        if (!empty($orderBy)) {
+            $cache = $this->orderRows($cache, $orderBy);
         }
         return $this->indexRowsByField($indexField, $cache);
     }
@@ -435,6 +458,38 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
             }
         }
         return true;
+    }
+
+    protected function orderRows(array $rows, string $orderBy): array
+    {
+        if (empty($rows)) {
+            return $rows;
+        }
+        $orderArray = [];
+
+        $orderings = GeneralUtility::trimExplode(',', $orderBy, true);
+        foreach ($orderings as $ordering) {
+            $orderParts = GeneralUtility::trimExplode(' ', $ordering);
+            if (!array_key_exists(1, $orderParts)) {
+                $orderParts[1] = 'ASC';
+            }
+            $name = $orderParts[0];
+            $order = strtolower($orderParts[1]) === 'desc' ? SORT_DESC : SORT_ASC;
+
+            $orderArray[$name] = $order;
+        }
+
+        $params = [];
+        foreach (array_keys($orderArray) as $key) {
+            foreach ($rows as $row) {
+                $params[$key][] = $row[$key];
+            }
+            $params[] = $orderArray[$key];
+        }
+
+        $params[] = &$rows;
+        call_user_func_array('array_multisort', $params);
+        return $rows;
     }
 
     /**

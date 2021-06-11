@@ -106,7 +106,7 @@ class SimpleWhereClauseParsingService implements SingletonInterface
         // Remove the table prefix table.field if the table is the one that would be queried, force spaces again
         $where = preg_replace('/\s' . preg_quote($table, '/') . '\.([\w]+)\s?(=|like)?\s?/', ' $1 $2 ', $where);
         // Return if there are still some unsupported characters
-        if (1 === preg_match('/(?:\(|%| or |\.| join |\`)/', $where)) {
+        if (1 === preg_match('/(?:\(|%| or |\.| join |\`| order )/', $where)) {
             return null;
         }
         if (0 === strpos($where, 'and')) {
