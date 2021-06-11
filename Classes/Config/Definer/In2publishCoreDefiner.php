@@ -184,6 +184,14 @@ class In2publishCoreDefiner implements DefinerInterface
                                                 [IntegerInRangeValidator::class => [1]]
                                             )
                                  )
+                                 ->addArray(
+                                     'preload',
+                                     Builder::start()
+                                            ->addGenericScalar(Node::T_INTEGER, Node::T_STRING),
+                                     [
+                                         0 => 'sys_file_storage',
+                                     ]
+                                 )
                       )
                       ->addArray(
                           'filePreviewDomainName',

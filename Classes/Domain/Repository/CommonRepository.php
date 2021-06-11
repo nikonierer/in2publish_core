@@ -55,6 +55,7 @@ use In2code\In2publishCore\Event\VoteIfSearchingForRelatedRecordsByPropertyShoul
 use In2code\In2publishCore\Event\VoteIfSearchingForRelatedRecordsByTableShouldBeSkipped;
 use In2code\In2publishCore\Event\VoteIfSearchingForRelatedRecordsShouldBeSkipped;
 use In2code\In2publishCore\Service\Configuration\TcaService;
+use In2code\In2publishCore\Service\Database\SimpleWhereClauseParsingService;
 use In2code\In2publishCore\Utility\DatabaseUtility;
 use In2code\In2publishCore\Utility\FileUtility;
 use Throwable;
@@ -153,9 +154,6 @@ class CommonRepository extends BaseRepository
     /** @var TaskRepository */
     protected $taskRepository;
 
-    /** @var ConfigContainer */
-    protected $configContainer;
-
     /** @var EventDispatcher */
     protected $eventDispatcher;
 
@@ -173,18 +171,19 @@ class CommonRepository extends BaseRepository
 
     public function __construct(
         TcaService $tcaService,
+        ConfigContainer $configContainer,
+        SimpleWhereClauseParsingService $simpleWhereClauseParsingService,
         ?Connection $localDatabase,
         ?Connection $foreignDatabase,
         RecordFactory $recordFactory,
         ResourceFactory $resourceFactory,
         TaskRepository $taskRepository,
-        ConfigContainer $configContainer,
         EventDispatcher $eventDispatcher,
         ReplaceMarkersService $replaceMarkersService,
         FlexFormTools $flexFormTools,
         FlexFormService $flexFormService
     ) {
-        parent::__construct($tcaService);
+        parent::__construct($tcaService, $configContainer, $simpleWhereClauseParsingService);
         $this->localDatabase = $localDatabase;
         $this->foreignDatabase = $foreignDatabase;
         if ($foreignDatabase === null || !$foreignDatabase->isConnected()) {
@@ -193,7 +192,6 @@ class CommonRepository extends BaseRepository
         $this->recordFactory = $recordFactory;
         $this->resourceFactory = $resourceFactory;
         $this->taskRepository = $taskRepository;
-        $this->configContainer = $configContainer;
         $this->eventDispatcher = $eventDispatcher;
         $this->eventDispatcher->dispatch(new CommonRepositoryWasInstantiated($this));
         $this->replaceMarkersService = $replaceMarkersService;

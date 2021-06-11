@@ -30,22 +30,30 @@ namespace In2code\In2publishCore\Domain\Repository;
  * This copyright notice MUST APPEAR in all copies of the script!
  */
 
+use In2code\In2publishCore\Config\ConfigContainer;
 use In2code\In2publishCore\Domain\Model\Record;
 use In2code\In2publishCore\Domain\Repository\Exception\MissingArgumentException;
 use In2code\In2publishCore\Service\Configuration\TcaService;
+use In2code\In2publishCore\Service\Database\SimpleWhereClauseParsingService;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use TYPO3\CMS\Core\Database\Connection;
+use TYPO3\CMS\Core\SingletonInterface;
 use TYPO3\CMS\Core\Utility\MathUtility;
 
 use function array_column;
+use function array_combine;
+use function array_key_exists;
+use function array_merge;
 use function explode;
 use function implode;
 use function is_array;
 use function is_int;
 use function preg_match;
+use function spl_object_id;
 use function stripos;
 use function strpos;
+use function strtolower;
 use function strtoupper;
 use function substr;
 use function trim;
@@ -55,7 +63,7 @@ use function trim;
  * on a specific database connection. this repository does not
  * own a database connection.
  */
-abstract class BaseRepository implements LoggerAwareInterface
+abstract class BaseRepository implements LoggerAwareInterface, SingletonInterface
 {
     use LoggerAwareTrait;
 
@@ -64,9 +72,31 @@ abstract class BaseRepository implements LoggerAwareInterface
     /** @var TcaService */
     protected $tcaService;
 
-    public function __construct(TcaService $tcaService)
-    {
+    /** @var ConfigContainer */
+    protected $configContainer;
+
+    /** @var array<string, string> */
+    protected $preloadTables = [];
+
+    /** @var array<string, array<string, array>> */
+    protected $preloadCache = [];
+
+    /** @var array<string, string> */
+    protected $statistics = [];
+
+    /** @var SimpleWhereClauseParsingService */
+    protected $parser = [];
+
+    public function __construct(
+        TcaService $tcaService,
+        ConfigContainer $configContainer,
+        SimpleWhereClauseParsingService $simpleWhereClauseParsingService
+    ) {
         $this->tcaService = $tcaService;
+        $this->configContainer = $configContainer;
+        $preloadTables = $this->configContainer->get('factory.preload');
+        $this->preloadTables = array_combine($preloadTables, $preloadTables);
+        $this->parser = $simpleWhereClauseParsingService;
     }
 
     /**
@@ -101,6 +131,14 @@ abstract class BaseRepository implements LoggerAwareInterface
 
         if (null === $tableName) {
             throw new MissingArgumentException('tableName');
+        }
+
+        if (isset($this->preloadTables[$tableName])) {
+            $properties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
+            if (null !== $properties) {
+                $properties[$propertyName] = strtolower((string)$propertyValue);
+                return $this->getPreloadedRowsMatchingProperties($connection, $tableName, $properties, $indexField);
+            }
         }
 
         if (empty($tableName)) {
@@ -150,6 +188,8 @@ abstract class BaseRepository implements LoggerAwareInterface
         if (!empty($limit)) {
             $query->setMaxResults((int)$limit);
         }
+        $this->statistics['f'][__FUNCTION__]++;
+        $this->statistics['t'][$tableName]++;
         $rows = $query->execute()->fetchAllAssociative();
 
         return $this->indexRowsByField($indexField, $rows);
@@ -179,6 +219,17 @@ abstract class BaseRepository implements LoggerAwareInterface
     ): array {
         if (null === $tableName) {
             throw new MissingArgumentException('tableName');
+        }
+
+        if (isset($this->preloadTables[$tableName])) {
+            $additionalProperties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
+            if (null !== $additionalProperties) {
+                foreach ($properties as $propertyName => $propertyValue) {
+                    $properties[$propertyName] = strtolower((string)$propertyValue);
+                }
+                $properties = array_merge($additionalProperties, $properties);
+                return $this->getPreloadedRowsMatchingProperties($connection, $tableName, $properties, $indexField);
+            }
         }
 
         if (empty($orderBy)) {
@@ -213,6 +264,8 @@ abstract class BaseRepository implements LoggerAwareInterface
         if (!empty($limit)) {
             $query->setMaxResults((int)$limit);
         }
+        $this->statistics['f'][__FUNCTION__]++;
+        $this->statistics['t'][$tableName]++;
         $rows = $query->execute()->fetchAllAssociative();
 
         return $this->indexRowsByField($indexField, $rows);
@@ -244,6 +297,24 @@ abstract class BaseRepository implements LoggerAwareInterface
         $connection->update($tableName, $properties, $identifierArray);
 
         return true;
+    }
+
+    /**
+     * Select all rows from a table. Only useful for tables with few entries.
+     *
+     * @param Connection $connection
+     * @param string $tableName
+     * @return array
+     */
+    protected function findAll(Connection $connection, string $tableName): array
+    {
+        $query = $connection->createQueryBuilder();
+        $query->getRestrictions()->removeAll();
+        $query->select('*')->from($tableName);
+        $this->statistics['f'][__FUNCTION__]++;
+        $this->statistics['t'][$tableName]++;
+        $rows = $query->execute()->fetchAll();
+        return array_column($rows, null, 'uid');
     }
 
     /**
@@ -327,5 +398,51 @@ abstract class BaseRepository implements LoggerAwareInterface
         }
 
         return array_column($rows, null, $indexField);
+    }
+
+    protected function getPreloadCache(Connection $connection, string $tableName): array
+    {
+        $connectionId = spl_object_id($connection);
+        if (!array_key_exists($connectionId, $this->preloadCache)) {
+            $this->preloadCache[$connectionId] = [];
+        }
+        if (!array_key_exists($tableName, $this->preloadCache[$connectionId])) {
+            $this->preloadCache[$connectionId][$tableName] = $this->findAll($connection, $tableName);
+        }
+        return $this->preloadCache[$connectionId][$tableName];
+    }
+
+    protected function getPreloadedRowsMatchingProperties(
+        Connection $connection,
+        ?string $tableName,
+        array $properties,
+        string $indexField
+    ): array {
+        $cache = $this->getPreloadCache($connection, $tableName);
+        foreach ($cache as $idx => $row) {
+            if (!$this->isRowMatchingProperties($row, $properties)) {
+                unset($cache[$idx]);
+            }
+        }
+        return $this->indexRowsByField($indexField, $cache);
+    }
+
+    protected function isRowMatchingProperties(array $row, array $properties): bool
+    {
+        foreach ($properties as $name => $value) {
+            if (!array_key_exists($name, $row) || strtolower((string)$row[$name]) !== $value) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Since this class is a singleton, this object will be destructed at the very end of any PHP processing.
+     * At that point, no queries will be executed anymore and the statistics are complete.
+     */
+    public function __destruct()
+    {
+        $this->logger->debug('BasicRepository query statistics', $this->statistics);
     }
 }
