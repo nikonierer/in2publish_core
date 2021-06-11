@@ -171,6 +171,20 @@ class In2publishCoreDefiner implements DefinerInterface
                                  ->addBoolean('includeSysFileReference', false)
                                  ->addBoolean('treatRemovedAndDeletedAsDifference', false)
                                  ->addArray(
+                                     'preload',
+                                     Builder::start()
+                                            ->addBoolean('enable', true)
+                                            ->addArray(
+                                                'tables',
+                                                Builder::start()
+                                                       ->addGenericScalar(Node::T_INTEGER, Node::T_STRING),
+                                                [
+                                                    0 => 'sys_file_storage',
+                                                ]
+                                            )
+
+                                 )
+                                 ->addArray(
                                      'fal',
                                      Builder::start()
                                             ->addBoolean('reserveSysFileUids', false)
@@ -183,14 +197,6 @@ class In2publishCoreDefiner implements DefinerInterface
                                                 150,
                                                 [IntegerInRangeValidator::class => [1]]
                                             )
-                                 )
-                                 ->addArray(
-                                     'preload',
-                                     Builder::start()
-                                            ->addGenericScalar(Node::T_INTEGER, Node::T_STRING),
-                                     [
-                                         0 => 'sys_file_storage',
-                                     ]
                                  )
                       )
                       ->addArray(

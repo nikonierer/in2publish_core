@@ -156,6 +156,28 @@ factory:
   # Enable to show records which are deleted on one side and non-existent on the other
   treatRemovedAndDeletedAsDifference: FALSE
 
+  # [Performance] [BETA]
+  #
+  # To disable this feature
+  #
+  # A list of database tables, which are processed im RAM rather that in the database.
+  # Each table listed in this array will only be queried once on local and on foreign. Any Query to that table
+  # will be parsed and processed in RAM.
+  # Queries which are too complex (JOIN, OR, ...) will trigger a fallback which runs the query in the database.
+  #
+  # DISCLAIMER:
+  #   This feature is distributed WITHOUT ANY WARRANTY;
+  #   A bug in this feature can lead to related records not being published.
+  preload:
+
+    # Simple feature toggle
+    enable: TRUE
+
+    # The list of tables to preload. The default is "[sys_file_storage]",
+    # because this table will be queried often but contain few records.
+    tables:
+      - sys_file_storage
+
   # FAL related settings
   fal:
 

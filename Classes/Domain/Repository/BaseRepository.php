@@ -44,8 +44,11 @@ use TYPO3\CMS\Core\Utility\MathUtility;
 use function array_column;
 use function array_combine;
 use function array_key_exists;
+use function array_keys;
 use function array_merge;
 use function array_slice;
+use function call_user_func_array;
+use function count;
 use function explode;
 use function implode;
 use function is_array;
@@ -58,6 +61,9 @@ use function strtolower;
 use function strtoupper;
 use function substr;
 use function trim;
+
+use const SORT_ASC;
+use const SORT_DESC;
 
 /**
  * Class BaseRepository. Inherit from this repository to execute methods
@@ -95,8 +101,10 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
     ) {
         $this->tcaService = $tcaService;
         $this->configContainer = $configContainer;
-        $preloadTables = $this->configContainer->get('factory.preload');
-        $this->preloadTables = array_combine($preloadTables, $preloadTables);
+        $preloadFeature = $this->configContainer->get('factory.preload');
+        if ($preloadFeature['enable']) {
+            $this->preloadTables = array_combine($preloadFeature['tables'], $preloadFeature['tables']);
+        }
         $this->parser = $simpleWhereClauseParsingService;
     }
 
