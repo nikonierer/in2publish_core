@@ -45,16 +45,17 @@ use function array_column;
 use function array_combine;
 use function array_key_exists;
 use function array_keys;
-use function array_merge;
-use function array_slice;
 use function call_user_func_array;
 use function count;
+use function current;
 use function explode;
 use function implode;
 use function is_array;
 use function is_int;
+use function json_encode;
+use function key;
 use function preg_match;
-use function spl_object_id;
+use function spl_object_hash;
 use function stripos;
 use function strpos;
 use function strtolower;
@@ -87,6 +88,9 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
 
     /** @var array<string, array<string, array>> */
     protected $preloadCache = [];
+
+    /** @var array<string, array<string, array>> */
+    protected $indexedCache = [];
 
     /** @var array<string, string> */
     protected $statistics = [];
@@ -150,25 +154,25 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
             $additionalWhere = $matches['where'];
             $orderBy = $matches['col'] . strtoupper($matches['dir'] ?? ' ASC');
         }
+
         $sortingField = $this->tcaService->getSortingField($tableName);
         if (empty($orderBy) && !empty($sortingField)) {
             $orderBy = $sortingField . ' ASC';
         }
 
-        if (isset($this->preloadTables[$tableName]) && empty($groupBy)) {
-            $properties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
-            if (null !== $properties) {
-                $properties[$propertyName] = strtolower((string)$propertyValue);
-                return $this->getPreloadedRowsMatchingProperties(
-                    $connection,
-                    $tableName,
-                    $properties,
-                    $indexField,
-                    $orderBy,
-                    (int)$limit
-                );
+        if (
+            '' === $limit
+            && '' === $groupBy
+            && '' === $additionalWhere
+            && isset($this->preloadTables[$tableName])
+        ) {
+            $rows = $this->getCachedRecords($connection, $tableName, $propertyName, $propertyValue);
+            if ('' !== $orderBy) {
+                $rows = $this->orderRows($rows, $orderBy);
             }
+            return $rows;
         }
+
         $additionalWhere = trim($additionalWhere);
         if (0 === stripos($additionalWhere, 'and')) {
             $additionalWhere = trim(substr($additionalWhere, 3));
@@ -238,26 +242,30 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
             throw new MissingArgumentException('tableName');
         }
 
-        if (empty($orderBy)) {
-            $orderBy = $this->tcaService->getSortingField($tableName);
+        if (1 === preg_match(self::ADDITIONAL_ORDER_BY_PATTERN, $additionalWhere, $matches)) {
+            $additionalWhere = $matches['where'];
+            $orderBy = $matches['col'] . strtoupper($matches['dir'] ?? ' ASC');
         }
 
-        if (isset($this->preloadTables[$tableName])) {
-            $additionalProperties = $this->parser->parseToPropertyArray($additionalWhere, $tableName);
-            if (null !== $additionalProperties) {
-                foreach ($properties as $propertyName => $propertyValue) {
-                    $properties[$propertyName] = strtolower((string)$propertyValue);
-                }
-                $properties = array_merge($additionalProperties, $properties);
-                return $this->getPreloadedRowsMatchingProperties(
-                    $connection,
-                    $tableName,
-                    $properties,
-                    $indexField,
-                    $orderBy,
-                    (int)$limit
-                );
+        $sortingField = $this->tcaService->getSortingField($tableName);
+        if (empty($orderBy) && !empty($sortingField)) {
+            $orderBy = $sortingField . ' ASC';
+        }
+
+        if (
+            '' === $limit
+            && '' === $groupBy
+            && '' === $additionalWhere
+            && isset($this->preloadTables[$tableName])
+            && 1 === count($properties)
+        ) {
+            $propertyName = key($properties);
+            $propertyValue = current($properties);
+            $rows = $this->getCachedRecords($connection, $tableName, $propertyName, $propertyValue);
+            if ('' !== $orderBy) {
+                $rows = $this->orderRows($rows, $orderBy);
             }
+            return $rows;
         }
 
         $query = $connection->createQueryBuilder();
@@ -423,54 +431,9 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
         return array_column($rows, null, $indexField);
     }
 
-    protected function getPreloadCache(Connection $connection, string $tableName): array
-    {
-        $connectionId = spl_object_id($connection);
-        if (!array_key_exists($connectionId, $this->preloadCache)) {
-            $this->preloadCache[$connectionId] = [];
-        }
-        if (!array_key_exists($tableName, $this->preloadCache[$connectionId])) {
-            $this->preloadCache[$connectionId][$tableName] = $this->findAll($connection, $tableName);
-        }
-        return $this->preloadCache[$connectionId][$tableName];
-    }
-
-    protected function getPreloadedRowsMatchingProperties(
-        Connection $connection,
-        ?string $tableName,
-        array $properties,
-        string $indexField,
-        string $orderBy,
-        int $limit
-    ): array {
-        $cache = $this->getPreloadCache($connection, $tableName);
-        foreach ($cache as $idx => $row) {
-            if (!$this->isRowMatchingProperties($row, $properties)) {
-                unset($cache[$idx]);
-            }
-        }
-        if ($limit > 0 && $limit < count($cache)) {
-            $cache = array_slice($cache, 0, $limit);
-        }
-        if (!empty($orderBy)) {
-            $cache = $this->orderRows($cache, $orderBy);
-        }
-        return $this->indexRowsByField($indexField, $cache);
-    }
-
-    protected function isRowMatchingProperties(array $row, array $properties): bool
-    {
-        foreach ($properties as $name => $value) {
-            if (!array_key_exists($name, $row) || strtolower((string)$row[$name]) !== $value) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     protected function orderRows(array $rows, string $orderBy): array
     {
-        if (empty($rows)) {
+        if (count($rows) < 2) {
             return $rows;
         }
         $orderArray = [];
@@ -498,6 +461,21 @@ abstract class BaseRepository implements LoggerAwareInterface, SingletonInterfac
         $params[] = &$rows;
         call_user_func_array('array_multisort', $params);
         return $rows;
+    }
+
+    protected function getCachedRecords(Connection $connection, ?string $tableName, $propertyName, $propertyValue)
+    {
+        $connectionObjectHash = spl_object_hash($connection);
+        if (!isset($this->indexedCache[$connectionObjectHash][$tableName][$propertyName])) {
+            if (!isset($this->preloadCache[$connectionObjectHash][$tableName])) {
+                $this->preloadCache[$connectionObjectHash][$tableName] = $this->findAll($connection, $tableName);
+            }
+            foreach ($this->preloadCache[$connectionObjectHash][$tableName] as $row) {
+                $this->indexedCache[$connectionObjectHash][$tableName][$propertyName][$row[$propertyName]][] = $row;
+            }
+        }
+        $this->statistics[__FUNCTION__ . '_cached']++;
+        return $this->indexedCache[$connectionObjectHash][$tableName][$propertyName][$propertyValue] ?? [];
     }
 
     /**
