@@ -10,11 +10,11 @@
 	"type": "typo3-cms-extension",
 	"license": "GPL-3.0-or-later",
 	"require": {
-		"php": "^7.2",
+		"php": "^7.4",
 		"ext-json": "*",
 		"ext-pdo": "*",
 		"ext-zip": "*",
-		"typo3/cms-core": "^10.4",
+		"typo3/cms-core": "^11.4",
 		"doctrine/dbal": "^2.11.0"
 	},
 	"require-dev": {
@@ -46,7 +46,8 @@
 	"extra": {
 		"branch-alias": {
 			"dev-master": "10.0.x-dev",
-			"dev-develop": "10.0.x-dev"
+			"dev-develop": "10.0.x-dev",
+			"dev-feature/v11": "11.0.x-dev"
 		},
 		"typo3/cms": {
 			"cms-package-dir": "{$vendor-dir}/typo3/cms",
