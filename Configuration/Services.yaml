@@ -280,3 +280,10 @@ services:
         identifier: 'in2publishcore-SkipTableVoter-VoteIfSearchingForRelatedRecordsByTableShouldBeSkipped'
         method: 'shouldSkipSearchingForRelatedRecordByTable'
         event: In2code\In2publishCore\Event\VoteIfSearchingForRelatedRecordsByTableShouldBeSkipped
+
+  In2code\In2publishCore\Config\Provider\PageTsProvider:
+    tags:
+      - name: event.listener
+        identifier: 'in2publishcore-PageTsProvider-bootCompleted'
+        method: 'processData'
+        event: TYPO3\CMS\Core\Core\Event\BootCompletedEvent
