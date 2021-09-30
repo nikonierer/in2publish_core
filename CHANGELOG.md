@@ -1,9 +1,4 @@
 # In2publish Core Change Log
-11.0.0:
-[UPGRADE] Replace TableConfigurationPostProcessingHookInterface with TYPO3\CMS\Core\Core\Event\BootCompletedEvent
-[CLEANUP] Remove outdated compatibility class SignalSlotReplacement
-
-
 10.0.0:
 
 [META] Set the branch alias version number to 10.0.x-dev
