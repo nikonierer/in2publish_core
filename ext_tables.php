@@ -148,6 +148,12 @@
             \In2code\In2publishCore\Controller\ToolsController::class,
             'sysInfoIndex,sysInfoShow,sysInfoDecode,sysInfoDownload,sysInfoUpload'
         );
+        $toolsRegistry->addTool(
+            'LLL:EXT:in2publish_core/Resources/Private/Language/locallang.xlf:moduleselector.compare',
+            'LLL:EXT:in2publish_core/Resources/Private/Language/locallang.xlf:moduleselector.compare.description',
+            \In2code\In2publishCore\Controller\Tools\CompareDatabaseToolController::class,
+            'index, compare'
+        );
     }
 
 
